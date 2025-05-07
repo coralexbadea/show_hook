@@ -10,7 +10,6 @@ int64_t hook(uint32_t reserved)
     uint8_t account_field[20];
     int32_t account_field_len = otxn_field(SBUF(account_field), sfAccount);
 
-    // compare the "From Account" (sfAccount) on the transaction with the account the hook is running on
     int equal = 0; BUFFER_EQUAL(equal, hook_accid, account_field, 20);
     if (equal)
     {
@@ -36,21 +35,22 @@ int64_t hook(uint32_t reserved)
     if (hash[0] % 10 > 5) { // win - double the XAH
         etxn_reserve(1);
         unsigned char amount_buffer[8];
-        int64_t amount_len = otxn_field(SBUF(amount_buffer), sfAmount);
-        int64_t drops_to_send = (int64_t)(AMOUNT_TO_DROPS(amount_buffer) * 2); // doubler pays back 2x received
-        if ((int64_t)(AMOUNT_TO_DROPS(amount_buffer)) > 1000000) {
-            rollback(SBUF("Doubler: Ammount not allowed."), 6);
-        }
+        if (otxn_field(SBUF(amount_buffer), sfAmount) != 8)
+            rollback(SBUF("Doubler: Invalid amount field size."), 7);
+
+        int64_t drops = AMOUNT_TO_DROPS(amount_buffer);
+        if (drops > 1000000)
+            rollback(SBUF("Doubler: Amount not allowed."), 6);
+
+        int64_t drops_to_send = drops * 2;
 
         unsigned char tx[PREPARE_PAYMENT_SIMPLE_SIZE];
-        
         PREPARE_PAYMENT_SIMPLE(tx, drops_to_send, account_field, 0, 0);
-        
-        // emit the transaction
+
         uint8_t tx_res[32];
         int64_t emit_result = emit(SBUF(tx_res), SBUF(tx));
         TRACEVAR(emit_result);
-        // accept and allow the original transaction through
+
         accept(SBUF("Doubler: You won! Funds emitted!"), 0);
     }
     else {
